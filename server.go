@@ -14,13 +14,13 @@ import (
 
 func main() {
 	r := mux.NewRouter()
-	r.Handle("/", http.FileServer(http.Dir("./views/")))
 	r.PathPrefix("/static/").Handler(http.StripPrefix("/static/",
 		http.FileServer(http.Dir("./static/"))))
 
 	r.Handle("/api/get-token", GetToken).Methods("GET")
 	r.Handle("/api/refresh-token", NotImplemented).Methods("GET")
 	r.Handle("/api", CheckToken).Methods("GET")
+	r.Handle("/", http.FileServer(http.Dir("./views/")))
 
 	err := http.ListenAndServe(":3000", handlers.LoggingHandler(os.Stdout, r))
 	if err != nil {
@@ -41,13 +41,16 @@ var GetToken = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 })
 
 var CheckToken = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-	token, err := r.Cookie("Token")
-	result, err := parseAccessToken(token.Value)
-	_, err = w.Write([]byte(result))
-
-	if err != nil {
-		log.Println(err)
+	if token, err := r.Cookie("Token"); err != nil {
+		_, err = w.Write([]byte("А токен то где, мужик?"))
+	} else {
+		result, err := parseAccessToken(token.Value)
+		_, err = w.Write([]byte(result))
+		if err != nil {
+			log.Fatal(err)
+		}
 	}
+
 })
 
 var NotImplemented = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

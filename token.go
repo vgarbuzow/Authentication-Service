@@ -47,11 +47,10 @@ func AccessTokenParse(token string) (*Claims, error) {
 		}
 		return secret, nil
 	})
-	if err != nil {
-		return nil, err
-	}
-	if claims, ok := access.Claims.(*Claims); ok && access.Valid {
-		return claims, nil
+	if err == nil && access != nil {
+		if claims, ok := access.Claims.(*Claims); ok && access.Valid {
+			return claims, nil
+		}
 	}
 	return nil, err
 }

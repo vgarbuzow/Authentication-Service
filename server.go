@@ -58,7 +58,6 @@ var GetTokensHandler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Requ
 	}
 	w.WriteHeader(http.StatusCreated)
 	_, err = w.Write(response)
-
 })
 
 var CheckTokenHandler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

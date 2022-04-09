@@ -35,7 +35,7 @@ func initDB() {
 	collection = client.Database("auth").Collection("refresh-tokens")
 }
 
-func createRefreshToken(refresh, guid string) {
+func insertRefreshToken(refresh, guid string) {
 	token := RefreshToken{Refresh: refresh, Guid: guid, Time: time.Now().Add(60 * 24 * time.Hour)}
 	insertResult, err := collection.InsertOne(context.TODO(), token)
 	if err != nil {
@@ -44,16 +44,14 @@ func createRefreshToken(refresh, guid string) {
 	fmt.Println("Inserted a single document: ", insertResult.InsertedID)
 }
 
-func readRefreshToken(guid string) RefreshToken {
+func readRefreshToken(guid string) (*RefreshToken, error) {
 	filter := bson.D{{"guid", guid}}
-	var result RefreshToken
-
-	err := collection.FindOne(context.TODO(), filter).Decode(&result)
-	if err != nil {
-		log.Fatal(err)
+	var result *RefreshToken
+	var err error
+	if err = collection.FindOne(context.TODO(), filter).Decode(&result); err == nil {
+		return result, err
 	}
-
-	return result
+	return nil, err
 }
 
 func updateRefreshToken(refresh, guid string) {

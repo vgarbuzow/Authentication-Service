@@ -22,16 +22,14 @@ type MsgJson struct {
 func main() {
 	initDB()
 	r := mux.NewRouter()
-
 	r.Handle("/api/get-token", GetTokensHandler).Methods("POST")
 	r.Handle("/api/refresh-token", RefreshTokenHandler).Methods("GET")
 	r.Handle("/api/check-token", CheckTokenHandler).Methods("POST")
-
+	r.Handle("/api/delete-token", DeleteTokenHandler).Methods("DELETE")
 	err := http.ListenAndServe(":3000", handlers.LoggingHandler(os.Stdout, r))
 	if err != nil {
 		log.Fatal(err)
 	}
-
 }
 
 var GetTokensHandler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -74,18 +72,8 @@ var CheckTokenHandler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Req
 		_, _ = w.Write(message)
 		return
 	}
-	message, _ := json.Marshal(MsgJson{Status: 0, Msg: "Валидация прошла успешно!"})
+	message, _ := json.Marshal(MsgJson{Status: 1, Msg: "Валидация прошла успешно!"})
 	_, err = w.Write(message)
-	/*if access, err := r.Cookie("Access"); err != nil {
-		_, err = w.Write([]byte("А токен то где, мужик?"))
-	} else {
-		result, err := ParseAccessToken(access.Value)
-		_, err = w.Write([]byte(result))
-		if err != nil {
-			log.Fatal(err)
-		}
-	}*/
-
 })
 
 var RefreshTokenHandler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -109,4 +97,8 @@ var RefreshTokenHandler = http.HandlerFunc(func(w http.ResponseWriter, r *http.R
 			log.Fatal(err)
 		}
 	}*/
+})
+
+var DeleteTokenHandler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+
 })

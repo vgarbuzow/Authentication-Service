@@ -1,28 +1,58 @@
 package main
 
+// Импортируем необходимые зависимости. Мы будем использовать
+// пакет из стандартной библиотеки и пакет от gorilla
+
 import (
-	"fmt"
+	"github.com/gorilla/handlers"
+	"github.com/gorilla/mux"
 	"log"
 	"net/http"
+	"os"
+	"time"
 )
 
 func main() {
-	http.HandleFunc("/api/getToken", getAccess)
-	http.HandleFunc("/api/refreshToken", refreshToken)
-	http.HandleFunc("/api/checkToken", checkToken) // each request calls handler
-	log.Fatal(http.ListenAndServe("localhost:8080", nil))
+	r := mux.NewRouter()
+	r.Handle("/", http.FileServer(http.Dir("./views/")))
+	r.PathPrefix("/static/").Handler(http.StripPrefix("/static/",
+		http.FileServer(http.Dir("./static/"))))
+
+	r.Handle("/api/get-token", GetToken).Methods("GET")
+	r.Handle("/api/refresh-token", NotImplemented).Methods("GET")
+	r.Handle("/api", CheckToken).Methods("GET")
+
+	err := http.ListenAndServe(":3000", handlers.LoggingHandler(os.Stdout, r))
+	if err != nil {
+		return
+	}
 }
 
-func getAccess(w http.ResponseWriter, r *http.Request) {
-	tkn, _ := createJWT()
-	fmt.Fprintf(w, "Получение токена..."+tkn)
+var GetToken = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	token, err := createTokens()
+	expiration := time.Now().Add(365 * 24 * time.Hour)
+	cookie := http.Cookie{Name: "Token", Value: token, Expires: expiration, MaxAge: 0, Secure: false, HttpOnly: true, Domain: "localhost", Path: "/"}
+	http.SetCookie(w, &cookie)
 
-}
+	_, err = w.Write([]byte(token))
+	if err != nil {
+		log.Println(err)
+	}
+})
 
-func refreshToken(w http.ResponseWriter, r *http.Request) {
-	fmt.Fprintf(w, "Обновление токена")
-}
+var CheckToken = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	token, err := r.Cookie("Token")
+	result, err := parseAccessToken(token.Value)
+	_, err = w.Write([]byte(result))
 
-func checkToken(w http.ResponseWriter, r *http.Request) {
-	fmt.Fprintf(w, "Проверка токена")
-}
+	if err != nil {
+		log.Println(err)
+	}
+})
+
+var NotImplemented = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	_, err := w.Write([]byte("Not Implemented"))
+	if err != nil {
+		log.Println(err)
+	}
+})

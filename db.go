@@ -21,7 +21,12 @@ func connectDB() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	defer client.Disconnect(ctx)
+	defer func(client *mongo.Client, ctx context.Context) {
+		err := client.Disconnect(ctx)
+		if err != nil {
+			log.Println(err)
+		}
+	}(client, ctx)
 
 	databases, err := client.ListDatabaseNames(ctx, bson.M{})
 	if err != nil {

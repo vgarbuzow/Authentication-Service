@@ -1,28 +1,36 @@
 package main
 
 import (
+	"encoding/base64"
 	"fmt"
 	"github.com/golang-jwt/jwt"
-	"github.com/google/uuid"
+	"golang.org/x/crypto/bcrypt"
 	"time"
 )
 
 type Claims struct {
-	Uuid string `json:"uuid"`
+	Guid string `json:"guid"`
 	jwt.StandardClaims
 }
 
-func createTokens() (string, error) {
+func createTokens(guid string) (string, string, error) {
+	secret := []byte("secret")
 	claims := Claims{
-		uuid.New().String(),
+		guid,
 		jwt.StandardClaims{
 			ExpiresAt: time.Now().Add(time.Minute * 15).Unix(),
-			Issuer:    "test",
 		},
 	}
 	token := jwt.NewWithClaims(jwt.SigningMethodHS512, claims)
-	tokenString, err := token.SignedString([]byte("secret"))
-	return tokenString, err
+	tokenString, err := token.SignedString(secret)
+	lenToken := len(tokenString)
+
+	refresh := time.Now().Add(time.Hour * 24 * 60).UTC().String()
+	refresh += tokenString[lenToken-4 : lenToken-1]
+	refresh = base64.StdEncoding.EncodeToString([]byte(refresh))
+	bytesRefresh, err := bcrypt.GenerateFromPassword([]byte(refresh), 14)
+	createRefreshToken(bytesRefresh, guid)
+	return tokenString, refresh, err
 }
 
 func parseAccessToken(tokenString string) (string, error) {

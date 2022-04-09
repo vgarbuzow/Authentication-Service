@@ -13,6 +13,7 @@ import (
 )
 
 func main() {
+	initDB()
 	r := mux.NewRouter()
 	r.PathPrefix("/static/").Handler(http.StripPrefix("/static/",
 		http.FileServer(http.Dir("./static/"))))
@@ -24,24 +25,36 @@ func main() {
 
 	err := http.ListenAndServe(":3000", handlers.LoggingHandler(os.Stdout, r))
 	if err != nil {
-		return
+		log.Fatal(err)
 	}
+
 }
 
 var GetToken = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-	token, err := createTokens()
-	expiration := time.Now().Add(365 * 24 * time.Hour)
-	cookie := http.Cookie{Name: "Token", Value: token, Expires: expiration, MaxAge: 0, Secure: false, HttpOnly: true, Domain: "localhost", Path: "/"}
-	http.SetCookie(w, &cookie)
+	query := r.URL.Query()
+	if guid := query.Get("guid"); guid != "" {
+		token, refresh, err := createTokens(guid)
+		cookieToken := http.Cookie{Name: "Token", Value: token, Expires: time.Now().Add(365 * 24 * time.Hour), MaxAge: 0,
+			Secure: false, HttpOnly: true, Domain: "localhost", Path: "/"}
+		cookieRefresh := http.Cookie{Name: "Refresh", Value: refresh, Expires: time.Now().Add(365 * 24 * time.Hour), MaxAge: 0,
+			Secure: false, HttpOnly: true, Domain: "localhost", Path: "/api/refresh-token"}
+		http.SetCookie(w, &cookieToken)
+		http.SetCookie(w, &cookieRefresh)
 
-	_, err = w.Write([]byte(token))
-	if err != nil {
-		log.Println(err)
+		_, err = w.Write([]byte(token))
+		if err != nil {
+			log.Println(err)
+		}
+	} else {
+		_, err := w.Write([]byte("Необходимо указать GUID в параметре запроса"))
+		if err != nil {
+			log.Fatal(err)
+		}
 	}
 })
 
 var CheckToken = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-	if token, err := r.Cookie("Token"); err != nil {
+	if token, err := r.Cookie("Refresh"); err != nil {
 		_, err = w.Write([]byte("А токен то где, мужик?"))
 	} else {
 		result, err := parseAccessToken(token.Value)

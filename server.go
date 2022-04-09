@@ -1,8 +1,5 @@
 package main
 
-// Импортируем необходимые зависимости. Мы будем использовать
-// пакет из стандартной библиотеки и пакет от gorilla
-
 import (
 	"github.com/gorilla/handlers"
 	"github.com/gorilla/mux"
@@ -18,9 +15,9 @@ func main() {
 	r.PathPrefix("/static/").Handler(http.StripPrefix("/static/",
 		http.FileServer(http.Dir("./static/"))))
 
-	r.Handle("/api/get-token", GetToken).Methods("GET")
-	r.Handle("/api/refresh-token", NotImplemented).Methods("GET")
-	r.Handle("/api", CheckToken).Methods("GET")
+	r.Handle("/api/get-token", GetTokensHandler).Methods("GET")
+	r.Handle("/api/refresh-token", RefreshTokenHandler).Methods("GET")
+	r.Handle("/api", CheckTokenHandler).Methods("GET")
 	r.Handle("/", http.FileServer(http.Dir("./views/")))
 
 	err := http.ListenAndServe(":3000", handlers.LoggingHandler(os.Stdout, r))
@@ -30,18 +27,15 @@ func main() {
 
 }
 
-var GetToken = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+var GetTokensHandler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 	query := r.URL.Query()
 	if guid := query.Get("guid"); guid != "" {
-		token, refresh, err := createTokens(guid)
-		cookieToken := http.Cookie{Name: "Token", Value: token, Expires: time.Now().Add(365 * 24 * time.Hour), MaxAge: 0,
-			Secure: false, HttpOnly: true, Domain: "localhost", Path: "/"}
-		cookieRefresh := http.Cookie{Name: "Refresh", Value: refresh, Expires: time.Now().Add(365 * 24 * time.Hour), MaxAge: 0,
-			Secure: false, HttpOnly: true, Domain: "localhost", Path: "/api/refresh-token"}
-		http.SetCookie(w, &cookieToken)
+		access, refresh, err := CreateTokens(guid)
+		cookieAccess, cookieRefresh := BuildCookiesTokens(access, refresh)
+		http.SetCookie(w, &cookieAccess)
 		http.SetCookie(w, &cookieRefresh)
 
-		_, err = w.Write([]byte(token))
+		_, err = w.Write([]byte("Токены успешно созданы"))
 		if err != nil {
 			log.Println(err)
 		}
@@ -53,11 +47,11 @@ var GetToken = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 	}
 })
 
-var CheckToken = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-	if token, err := r.Cookie("Refresh"); err != nil {
+var CheckTokenHandler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	if access, err := r.Cookie("Access"); err != nil {
 		_, err = w.Write([]byte("А токен то где, мужик?"))
 	} else {
-		result, err := parseAccessToken(token.Value)
+		result, err := ParseAccessToken(access.Value)
 		_, err = w.Write([]byte(result))
 		if err != nil {
 			log.Fatal(err)
@@ -66,9 +60,33 @@ var CheckToken = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 
 })
 
-var NotImplemented = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-	_, err := w.Write([]byte("Not Implemented"))
-	if err != nil {
-		log.Println(err)
+var RefreshTokenHandler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	if access, err := r.Cookie("Access"); err == nil {
+		if refresh, err := r.Cookie("Refresh"); err == nil {
+			if isValid, guid := IsValidTokens(access.Value, refresh.Value); isValid {
+				deleteRefreshToken(guid)
+				access, refresh, err := CreateTokens(guid)
+				cookieAccess, cookieRefresh := BuildCookiesTokens(access, refresh)
+				http.SetCookie(w, &cookieAccess)
+				http.SetCookie(w, &cookieRefresh)
+				_, err = w.Write([]byte("Токены успешно обновлены!"))
+				if err != nil {
+					log.Fatal(err)
+				}
+			}
+		}
+	} else {
+		_, err = w.Write([]byte("Токены не обновлены!"))
+		if err != nil {
+			log.Fatal(err)
+		}
 	}
 })
+
+func BuildCookiesTokens(access, refresh string) (http.Cookie, http.Cookie) {
+	cookieAccess := http.Cookie{Name: "Access", Value: access, Expires: time.Now().Add(365 * 24 * time.Hour), MaxAge: 0,
+		Secure: false, HttpOnly: true, Domain: "localhost", Path: "/"}
+	cookieRefresh := http.Cookie{Name: "Refresh", Value: refresh, Expires: time.Now().Add(365 * 24 * time.Hour), MaxAge: 0,
+		Secure: false, HttpOnly: true, Domain: "localhost", Path: "/api/refresh-token"}
+	return cookieAccess, cookieRefresh
+}

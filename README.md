@@ -56,12 +56,12 @@ server.go - представляет собой сервер (localhost:4000) с
 
 ```yaml
 {
-"status": 1, </br>
-"access":"eyJhbGciOiJIUzUxMiIsInR5cCI6IkpXVCJ9.
-eyJndWlkIjoiNkY5NjE5RkYtOEI4Ni1EMDExLUI0MkQtMDBDRjRGQzk2NEZGIiwiZXhwIjoxNjQ5NjE4Mzc2fQ.
-CEoTyIHRJsXREF1SOGP-2UxqSoYGXwvF-Yj-6nMvUAo6LgIY9L4gArLQeIxdPvdgHzzIk8YoPo0MdxbMTWoCzw",
-"refresh": "V1dXV1dXV1doQQ==",
-"guid": "6F9619FF-8B86-D011-B42D-00CF4FC964FF"
+    "status": 1,
+    "access":"eyJhbGciOiJIUzUxMiIsInR5cCI6IkpXVCJ9.
+    eyJndWlkIjoiNkY5NjE5RkYtOEI4Ni1EMDExLUI0MkQtMDBDRjRGQzk2NEZGIiwiZXhwIjoxNjQ5NjE4Mzc2fQ.
+    CEoTyIHRJsXREF1SOGP-2UxqSoYGXwvF-Yj-6nMvUAo6LgIY9L4gArLQeIxdPvdgHzzIk8YoPo0MdxbMTWoCzw",
+    "refresh": "V1dXV1dXV1doQQ==",
+    "guid": "6F9619FF-8B86-D011-B42D-00CF4FC964FF"
 } 
 ```
 где status = 0..1 и в случае ошибки равен 0, в случае успешной генерации равен 1
@@ -69,10 +69,10 @@ CEoTyIHRJsXREF1SOGP-2UxqSoYGXwvF-Yj-6nMvUAo6LgIY9L4gArLQeIxdPvdgHzzIk8YoPo0MdxbM
 2. Для обновления токенов необходимо сформировать запрос в формате json на адрес localhost:4000/api/refresh-token </br> 
 ```yaml
 {
-"access":"eyJhbGciOiJIUzUxMiIsInR5cCI6IkpXVCJ9.
-eyJndWlkIjoiNkY5NjE5RkYtOEI4Ni1EMDExLUI0MkQtMDBDRjRGQzk2NEZGIiwiZXhwIjoxNjQ5NjE4Mzc2fQ.
-CEoTyIHRJsXREF1SOGP-2UxqSoYGXwvF-Yj-6nMvUAo6LgIY9L4gArLQeIxdPvdgHzzIk8YoPo0MdxbMTWoCzw",
-"refresh": "V1dXV1dXV1doQQ=="
+    "access":"eyJhbGciOiJIUzUxMiIsInR5cCI6IkpXVCJ9.
+    eyJndWlkIjoiNkY5NjE5RkYtOEI4Ni1EMDExLUI0MkQtMDBDRjRGQzk2NEZGIiwiZXhwIjoxNjQ5NjE4Mzc2fQ.
+    CEoTyIHRJsXREF1SOGP-2UxqSoYGXwvF-Yj-6nMvUAo6LgIY9L4gArLQeIxdPvdgHzzIk8YoPo0MdxbMTWoCzw",
+    "refresh": "V1dXV1dXV1doQQ=="
 } 
 ```
 В результате такого запроса будут получены токены в аналогичном формате п. 1.
@@ -80,16 +80,16 @@ CEoTyIHRJsXREF1SOGP-2UxqSoYGXwvF-Yj-6nMvUAo6LgIY9L4gArLQeIxdPvdgHzzIk8YoPo0MdxbM
 3. Для проверки валидности Access токена необходимо сформировать запрос в формате json на адрес localhost:4000/api/check-token </br> 
 ```yaml
 {
-"access":"eyJhbGciOiJIUzUxMiIsInR5cCI6IkpXVCJ9.
-eyJndWlkIjoiNkY5NjE5RkYtOEI4Ni1EMDExLUI0MkQtMDBDRjRGQzk2NEZGIiwiZXhwIjoxNjQ5NjE4Mzc2fQ.
-CEoTyIHRJsXREF1SOGP-2UxqSoYGXwvF-Yj-6nMvUAo6LgIY9L4gArLQeIxdPvdgHzzIk8YoPo0MdxbMTWoCzw"
+    "access":"eyJhbGciOiJIUzUxMiIsInR5cCI6IkpXVCJ9.
+    eyJndWlkIjoiNkY5NjE5RkYtOEI4Ni1EMDExLUI0MkQtMDBDRjRGQzk2NEZGIiwiZXhwIjoxNjQ5NjE4Mzc2fQ.
+    CEoTyIHRJsXREF1SOGP-2UxqSoYGXwvF-Yj-6nMvUAo6LgIY9L4gArLQeIxdPvdgHzzIk8YoPo0MdxbMTWoCzw"
 } 
 ```
 В результате запроса будет получен ответ, где status = 1 - токен валиден, status = 0 - ошибка при валидции
 ```yaml
 {
-"status": 1,
-"message": "Валидация прошла успешно!"
+    "status": 1,
+    "message": "Валидация прошла успешно!"
 }
 ```
 
@@ -97,7 +97,7 @@ CEoTyIHRJsXREF1SOGP-2UxqSoYGXwvF-Yj-6nMvUAo6LgIY9L4gArLQeIxdPvdgHzzIk8YoPo0MdxbM
 например при попытке валидировать некорректный токен, будет получена следующая ошибка:
 ```yaml
 {
-"status": 0,
-"message": "Ошибка валидации access токена"
+    "status": 0,
+    "message": "Ошибка валидации access токена"
 }
 ```

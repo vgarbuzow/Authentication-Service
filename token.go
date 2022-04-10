@@ -32,7 +32,6 @@ func CreateRefreshToken(guid string, query func(string, string) error) (string, 
 			return tokenStr, err
 		}
 	}
-	errorLog.Println(err)
 	return "", err
 }
 
@@ -54,6 +53,11 @@ func ParseVerifiedAccessToken(token string) (*Claims, error) {
 		}
 		return secret, nil
 	})
+
+	if err != nil {
+		return nil, err
+	}
+
 	if access.Valid {
 		return access.Claims.(*Claims), nil
 	} else if ve, ok := err.(*jwt.ValidationError); ok {
@@ -70,7 +74,7 @@ func RefreshTokenValidate(guid, refresh string) error {
 	var err error
 	var dbRef *RefreshToken
 	var decodeRef []byte
-	if dbRef, err = ReadRefreshToken(guid); err != nil {
+	if dbRef, err = ReadRefreshToken(guid); err == nil {
 		if decodeRef, err = base64.StdEncoding.DecodeString(refresh); err == nil {
 			if err = bcrypt.CompareHashAndPassword([]byte(dbRef.Refresh), decodeRef); err == nil {
 				return nil

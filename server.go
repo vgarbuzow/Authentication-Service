@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"flag"
 	"github.com/gorilla/mux"
-	"go.mongodb.org/mongo-driver/mongo"
 	"io"
 	"log"
 	"net/http"
@@ -44,23 +43,20 @@ func main() {
 }
 
 var GetTokensHandler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-	w.Header().Add("Content-Type", "application/json; charset=UTF-8")
-	w.Header().Add("Host", "localhost")
+	infoLog.Printf("Запрос на получение токена")
 	body, _ := io.ReadAll(r.Body)
 	var guid Guid
-	_ = json.Unmarshal(body, &guid)
-	if token, err := ReadRefreshToken(guid.Guid); err != mongo.ErrNoDocuments {
-		w.WriteHeader(http.StatusInternalServerError)
-		message, _ := json.Marshal(MsgJson{Status: 0, Msg: "Произошла ошибка на стороне сервера"})
-		_, _ = w.Write(message)
-		return
-	} else if token != nil {
-		w.WriteHeader(http.StatusForbidden)
-		message, _ := json.Marshal(MsgJson{Status: 0, Msg: "Пользователь с указаным guid уже существует"})
-		_, err = w.Write(message)
+	w.Header().Add("Content-Type", "application/json; charset=UTF-8")
+	w.Header().Add("Host", "localhost")
+
+	err := json.Unmarshal(body, &guid)
+	if err != nil {
+		errHandler(err, "Ошибка при разборе json", &w)
 		return
 	}
-	WriteInResponseNewTokensJson(guid.Guid, &w)
+
+	SendTokenResponse(guid.Guid, &w, InsertRefreshToken)
+	infoLog.Printf("Токен успешно сгенерирован")
 })
 
 var CheckTokenHandler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -68,58 +64,84 @@ var CheckTokenHandler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Req
 	w.Header().Add("Host", "localhost")
 	var token Tokens
 	body, err := io.ReadAll(r.Body)
-	err = json.Unmarshal(body, &token)
-	_, err = ParseVerifiedAccessToken(token.Access)
-	w.WriteHeader(http.StatusOK)
 	if err != nil {
-		w.WriteHeader(http.StatusBadRequest)
-		message, _ := json.Marshal(MsgJson{Status: 0, Msg: "Токен не валидный!"})
-		_, _ = w.Write(message)
+		errHandler(err, "Ошибка при чтении тела запроса", &w)
 		return
 	}
+	err = json.Unmarshal(body, &token)
+	if err != nil {
+		errHandler(err, "Ошибка при разборе json", &w)
+		return
+	}
+	_, err = ParseVerifiedAccessToken(token.Access)
+	if err != nil {
+		errHandler(err, "Ошибка валидации access токена", &w)
+		return
+	}
+	w.WriteHeader(http.StatusOK)
 	message, _ := json.Marshal(MsgJson{Status: 1, Msg: "Валидация прошла успешно!"})
 	_, err = w.Write(message)
+	infoLog.Printf("Валидация прошла успешно!")
 })
 
 var RefreshTokenHandler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 	w.Header().Add("Content-Type", "application/json; charset=UTF-8")
 	w.Header().Add("Host", "localhost")
 	body, err := io.ReadAll(r.Body)
+	if err != nil {
+		errHandler(err, "Ошибка при чтении тела запроса", &w)
+	}
 	token, err := DecodingJsonToken(body)
 	if err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		message, _ := json.Marshal(MsgJson{Status: 0, Msg: "Произошла ошибка на стороне сервера"})
-		_, _ = w.Write(message)
+		errHandler(err, "Ошибка при разборе json", &w)
 		return
 	}
-	if claims, _ := ParseVerifiedAccessToken(token.Access); claims == nil {
-		w.WriteHeader(http.StatusBadRequest)
-		message, _ := json.Marshal(MsgJson{Status: 0, Msg: "Произошла ошибка при валдицаии access токена"})
-		_, _ = w.Write(message)
+
+	if token.Refresh == "" || token.Access == "" {
+		errHandler(nil, "Отсутствует токен(ы)", &w)
+		return
+	}
+
+	if claims, err := ParseVerifiedAccessToken(token.Access); claims == nil || err != nil {
+		errHandler(err, "Ошибка валидации access токена", &w)
 		return
 	} else {
 		if err := RefreshTokenValidate(claims.Guid, token.Refresh); err == nil {
-			err = DeleteRefreshToken(claims.Guid)
-			WriteInResponseNewTokensJson(claims.Guid, &w)
+			SendTokenResponse(claims.Guid, &w, UpdateRefreshToken)
 		} else {
-			w.WriteHeader(http.StatusBadRequest)
-			message, _ := json.Marshal(MsgJson{Status: 0, Msg: "Произошла ошибка при валдицаии refresh токена"})
-			_, _ = w.Write(message)
+			errHandler(err, "Ошибка валидации refresh токена", &w)
 		}
 	}
 })
 
-func WriteInResponseNewTokensJson(guid string, w *http.ResponseWriter) {
-	writer := *w
-	access, err := GetNewAccessToken(guid)
-	refresh, err := CreateRefreshToken(guid, InsertRefreshToken)
-	response, err := TokenEncodingJson(Tokens{Status: 1, Access: access, Refresh: refresh, Guid: guid})
-	if err != nil {
-		writer.WriteHeader(http.StatusInternalServerError)
-		message, _ := json.Marshal(MsgJson{Status: 0, Msg: "Произошла ошибка на стороне сервера"})
-		_, _ = writer.Write(message)
+func SendTokenResponse(guid string, w *http.ResponseWriter, query func(string, string) error) {
+	if guid == "" {
+		errHandler(nil, "Поле guid пустое или отсутствует", w)
 		return
 	}
-	writer.WriteHeader(http.StatusCreated)
-	_, err = writer.Write(response)
+
+	access, err := GetNewAccessToken(guid)
+	if err != nil {
+		errHandler(err, "Ошибка при генерации access токена", w)
+		return
+	}
+
+	refresh, err := CreateRefreshToken(guid, query)
+	if err != nil {
+		errHandler(err, "Ошибка при создании refresh токена", w)
+		return
+	}
+
+	response, err := TokenEncodingJson(Tokens{Status: 1, Access: access, Refresh: refresh, Guid: guid})
+	(*w).WriteHeader(http.StatusCreated)
+	_, err = (*w).Write(response)
+	infoLog.Printf("Токен успешно сгенерирован")
+}
+
+func errHandler(err error, errText string, w *http.ResponseWriter) {
+	errorLog.Println(err)
+	(*w).WriteHeader(http.StatusBadRequest)
+	message, _ := json.Marshal(MsgJson{Status: 0, Msg: errText})
+	_, _ = (*w).Write(message)
+	return
 }

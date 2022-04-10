@@ -3,7 +3,6 @@ module server
 go 1.18
 
 require (
-	github.com/google/uuid v1.3.0
 	github.com/felixge/httpsnoop v1.0.2 // indirect
 	github.com/go-stack/stack v1.8.0 // indirect
 	github.com/golang-jwt/jwt v3.2.2+incompatible // indirect

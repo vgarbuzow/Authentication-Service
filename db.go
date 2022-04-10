@@ -37,7 +37,7 @@ func InsertRefreshToken(refresh, guid string) error {
 }
 
 func ReadRefreshToken(guid string) (*RefreshToken, error) {
-	filter := bson.D{{"guid", guid}}
+	filter := bson.D{{"_id", guid}}
 	var result *RefreshToken
 	var err error
 	if err = collection.FindOne(context.TODO(), filter).Decode(&result); err == nil {
@@ -47,7 +47,7 @@ func ReadRefreshToken(guid string) (*RefreshToken, error) {
 }
 
 func UpdateRefreshToken(refresh, guid string) error {
-	filter := bson.D{{"guid", guid}}
+	filter := bson.D{{"_id", guid}}
 	update := bson.D{
 		{"$set", bson.D{
 			{"refresh", refresh},
@@ -55,15 +55,6 @@ func UpdateRefreshToken(refresh, guid string) error {
 		}},
 	}
 	_, err := collection.UpdateOne(context.TODO(), filter, update)
-	if err != nil {
-		return err
-	}
-	return nil
-}
-
-func DeleteRefreshToken(guid string) error {
-	filter := bson.D{{"guid", guid}}
-	_, err := collection.DeleteOne(context.TODO(), filter)
 	if err != nil {
 		return err
 	}

@@ -2,9 +2,7 @@ package main
 
 import (
 	"context"
-	"fmt"
 	"go.mongodb.org/mongo-driver/bson"
-	"log"
 	"time"
 
 	"go.mongodb.org/mongo-driver/mongo"
@@ -12,9 +10,9 @@ import (
 )
 
 type RefreshToken struct {
-	Guid    string
-	Refresh string
-	Time    time.Time
+	Guid    string    `bson:"_id"`
+	Refresh string    `bson:"refresh"`
+	Time    time.Time `bson:"time"`
 }
 
 var collection *mongo.Collection
@@ -24,27 +22,21 @@ func initDB() {
 	clientOptions := options.Client().ApplyURI("mongodb://localhost:27017/")
 	client, err := mongo.Connect(ctx, clientOptions)
 	if err != nil {
-		log.Fatal(err)
+		errorLog.Fatal(err)
 	}
-
-	err = client.Ping(ctx, nil)
-	if err != nil {
-		log.Fatal(err)
-	}
-
 	collection = client.Database("auth").Collection("refresh-tokens")
 }
 
-func insertRefreshToken(refresh, guid string) {
+func InsertRefreshToken(refresh, guid string) error {
 	token := RefreshToken{Refresh: refresh, Guid: guid, Time: time.Now().Add(60 * 24 * time.Hour)}
-	insertResult, err := collection.InsertOne(context.TODO(), token)
+	_, err := collection.InsertOne(context.TODO(), token)
 	if err != nil {
-		log.Fatal(err)
+		return err
 	}
-	fmt.Println("Inserted a single document: ", insertResult.InsertedID)
+	return nil
 }
 
-func readRefreshToken(guid string) (*RefreshToken, error) {
+func ReadRefreshToken(guid string) (*RefreshToken, error) {
 	filter := bson.D{{"guid", guid}}
 	var result *RefreshToken
 	var err error
@@ -54,7 +46,7 @@ func readRefreshToken(guid string) (*RefreshToken, error) {
 	return nil, err
 }
 
-func updateRefreshToken(refresh, guid string) {
+func UpdateRefreshToken(refresh, guid string) error {
 	filter := bson.D{{"guid", guid}}
 	update := bson.D{
 		{"$set", bson.D{
@@ -62,19 +54,18 @@ func updateRefreshToken(refresh, guid string) {
 			{"time", time.Now().Add(60 * 24 * time.Hour)},
 		}},
 	}
-	updateResult, err := collection.UpdateOne(context.TODO(), filter, update)
+	_, err := collection.UpdateOne(context.TODO(), filter, update)
 	if err != nil {
-		log.Fatal(err)
+		return err
 	}
-
-	fmt.Printf("Matched %v documents and updated %v documents.\n", updateResult.MatchedCount, updateResult.ModifiedCount)
+	return nil
 }
 
-func deleteRefreshToken(guid string) {
+func DeleteRefreshToken(guid string) error {
 	filter := bson.D{{"guid", guid}}
-	deleteResult, err := collection.DeleteOne(context.TODO(), filter)
+	_, err := collection.DeleteOne(context.TODO(), filter)
 	if err != nil {
-		log.Fatal(err)
+		return err
 	}
-	fmt.Printf("Deleted %v documents in the trainers collection\n", deleteResult.DeletedCount)
+	return nil
 }

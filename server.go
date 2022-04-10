@@ -2,8 +2,9 @@ package main
 
 import (
 	"encoding/json"
-	"github.com/gorilla/handlers"
+	"flag"
 	"github.com/gorilla/mux"
+	"go.mongodb.org/mongo-driver/mongo"
 	"io"
 	"log"
 	"net/http"
@@ -19,43 +20,47 @@ type MsgJson struct {
 	Msg    string `json:"message"`
 }
 
+var infoLog = log.New(os.Stdout, "INFO\t", log.Ldate|log.Ltime)
+var errorLog = log.New(os.Stderr, "ERROR\t", log.Ldate|log.Ltime|log.Lshortfile)
+
 func main() {
+	infoLog.Printf("Соединение с БД")
 	initDB()
 	r := mux.NewRouter()
 	r.Handle("/api/get-token", GetTokensHandler).Methods("POST")
-	r.Handle("/api/refresh-token", RefreshTokenHandler).Methods("GET")
+	r.Handle("/api/refresh-token", RefreshTokenHandler).Methods("PUT")
 	r.Handle("/api/check-token", CheckTokenHandler).Methods("POST")
-	r.Handle("/api/delete-token", DeleteTokenHandler).Methods("DELETE")
-	err := http.ListenAndServe(":3000", handlers.LoggingHandler(os.Stdout, r))
+	addr := flag.String("addr", ":4000", "localhost")
+	srv := &http.Server{
+		Addr:     *addr,
+		ErrorLog: errorLog,
+		Handler:  r,
+	}
+	infoLog.Printf("Запуск сервера на %s", *addr)
+	err := srv.ListenAndServe()
 	if err != nil {
-		log.Fatal(err)
+		errorLog.Fatal(err)
 	}
 }
 
 var GetTokensHandler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 	w.Header().Add("Content-Type", "application/json; charset=UTF-8")
 	w.Header().Add("Host", "localhost")
-	body, err := io.ReadAll(r.Body)
+	body, _ := io.ReadAll(r.Body)
 	var guid Guid
-	err = json.Unmarshal(body, &guid)
-	token, err := readRefreshToken(guid.Guid)
-	if token != nil {
+	_ = json.Unmarshal(body, &guid)
+	if token, err := ReadRefreshToken(guid.Guid); err != mongo.ErrNoDocuments {
+		w.WriteHeader(http.StatusInternalServerError)
+		message, _ := json.Marshal(MsgJson{Status: 0, Msg: "Произошла ошибка на стороне сервера"})
+		_, _ = w.Write(message)
+		return
+	} else if token != nil {
 		w.WriteHeader(http.StatusForbidden)
 		message, _ := json.Marshal(MsgJson{Status: 0, Msg: "Пользователь с указаным guid уже существует"})
 		_, err = w.Write(message)
 		return
 	}
-	access, err := GetNewAccessToken(guid.Guid)
-	refresh, err := GetNewRefreshToken(guid.Guid)
-	response, err := TokenEncodingJson(Tokens{Status: 1, Access: access, Refresh: refresh, Guid: guid.Guid})
-	if err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		message, _ := json.Marshal(MsgJson{Status: 0, Msg: "Произошла ошибка на стороне сервера"})
-		_, _ = w.Write(message)
-		return
-	}
-	w.WriteHeader(http.StatusCreated)
-	_, err = w.Write(response)
+	WriteInResponseNewTokensJson(guid.Guid, &w)
 })
 
 var CheckTokenHandler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -64,7 +69,7 @@ var CheckTokenHandler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Req
 	var token Tokens
 	body, err := io.ReadAll(r.Body)
 	err = json.Unmarshal(body, &token)
-	_, err = AccessTokenParse(token.Access)
+	_, err = ParseVerifiedAccessToken(token.Access)
 	w.WriteHeader(http.StatusOK)
 	if err != nil {
 		w.WriteHeader(http.StatusBadRequest)
@@ -77,28 +82,44 @@ var CheckTokenHandler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Req
 })
 
 var RefreshTokenHandler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-	/*if access, err := r.Cookie("Access"); err == nil {
-		if refresh, err := r.Cookie("Refresh"); err == nil {
-			if isValid, guid := IsValidTokens(access.Value, refresh.Value); isValid {
-				deleteRefreshToken(guid)
-				access, refresh, err := CreateTokens(guid)
-				cookieAccess, cookieRefresh := BuildCookiesTokens(access, refresh)
-				http.SetCookie(w, &cookieAccess)
-				http.SetCookie(w, &cookieRefresh)
-				_, err = w.Write([]byte("Токены успешно обновлены!"))
-				if err != nil {
-					log.Fatal(err)
-				}
-			}
-		}
+	w.Header().Add("Content-Type", "application/json; charset=UTF-8")
+	w.Header().Add("Host", "localhost")
+	body, err := io.ReadAll(r.Body)
+	token, err := DecodingJsonToken(body)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		message, _ := json.Marshal(MsgJson{Status: 0, Msg: "Произошла ошибка на стороне сервера"})
+		_, _ = w.Write(message)
+		return
+	}
+	if claims, _ := ParseVerifiedAccessToken(token.Access); claims == nil {
+		w.WriteHeader(http.StatusBadRequest)
+		message, _ := json.Marshal(MsgJson{Status: 0, Msg: "Произошла ошибка при валдицаии access токена"})
+		_, _ = w.Write(message)
+		return
 	} else {
-		_, err = w.Write([]byte("Токены не обновлены!"))
-		if err != nil {
-			log.Fatal(err)
+		if err := RefreshTokenValidate(claims.Guid, token.Refresh); err == nil {
+			err = DeleteRefreshToken(claims.Guid)
+			WriteInResponseNewTokensJson(claims.Guid, &w)
+		} else {
+			w.WriteHeader(http.StatusBadRequest)
+			message, _ := json.Marshal(MsgJson{Status: 0, Msg: "Произошла ошибка при валдицаии refresh токена"})
+			_, _ = w.Write(message)
 		}
-	}*/
+	}
 })
 
-var DeleteTokenHandler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-
-})
+func WriteInResponseNewTokensJson(guid string, w *http.ResponseWriter) {
+	writer := *w
+	access, err := GetNewAccessToken(guid)
+	refresh, err := CreateRefreshToken(guid, InsertRefreshToken)
+	response, err := TokenEncodingJson(Tokens{Status: 1, Access: access, Refresh: refresh, Guid: guid})
+	if err != nil {
+		writer.WriteHeader(http.StatusInternalServerError)
+		message, _ := json.Marshal(MsgJson{Status: 0, Msg: "Произошла ошибка на стороне сервера"})
+		_, _ = writer.Write(message)
+		return
+	}
+	writer.WriteHeader(http.StatusCreated)
+	_, err = writer.Write(response)
+}
